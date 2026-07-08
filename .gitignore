@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 虛擬環境
+.venv/
+venv/
+ENV/
+
+# 環境變數（包含敏感資訊，不可上傳）
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 測試與覆蓋率
+.pytest_cache/
+.coverage
+htmlcov/
+
+# uv
+.python-version
+
+# Gemini / AI 助理
+.agents/
+.gemini/
+CLAUDE.md
