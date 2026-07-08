@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # 資料庫
     database_url: str = "sqlite:///./invoices.db"
 
+    # 公司統編（用於比對發票買方統編是否為本公司）
+    company_tax_id: str = ""
+
     # n8n webhook
     n8n_webhook_url: str = ""
     n8n_webhook_secret: str = ""
