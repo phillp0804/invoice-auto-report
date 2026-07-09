@@ -5,6 +5,7 @@
 """
 
 from PIL import Image
+from pyzbar.pyzbar import decode as decode_qr_codes
 
 from schemas.invoice_schema import InvoiceRecognitionResult
 from utils.qr_parser import parse_invoice_qr_string
@@ -20,9 +21,26 @@ class QrService:
             image: PIL Image 物件。
 
         Returns:
-            辨識結果（recognition_method="qr_code"），若無 QR Code 則回傳 None。
+            辨識結果（recognition_method="qr_code"），若偵測不到 QR Code、
+            或偵測到的 QR Code 不符合電子發票格式，則回傳 None，交由
+            ocr_service 接手 AI 辨識備援。
         """
-        # TODO: 使用 pyzbar 偵測 QR Code
-        # TODO: 若偵測到，呼叫 parse_invoice_qr_string 解析
-        # TODO: 回傳 InvoiceRecognitionResult（field_confidence=None，視為 100% 可信）
-        raise NotImplementedError
+        for symbol in decode_qr_codes(image):
+            try:
+                qr_string = symbol.data.decode("utf-8")
+                qr_data = parse_invoice_qr_string(qr_string)
+            except (UnicodeDecodeError, ValueError):
+                # 圖片中可能混有非發票用途的 QR Code（例如商家其他宣傳碼），略過並嘗試下一個
+                continue
+
+            return InvoiceRecognitionResult(
+                invoice_number=qr_data.invoice_number,
+                tax_id=qr_data.seller_tax_id,
+                date=qr_data.date,
+                amount=float(qr_data.total_amount),
+                items=None,
+                recognition_method="qr_code",
+                field_confidence=None,
+            )
+
+        return None

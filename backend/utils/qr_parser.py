@@ -90,6 +90,12 @@ def parse_invoice_qr_string(qr_string: str) -> InvoiceQrData:
     seller_tax_id = raw[45:53]
 
     # 驗證發票號碼格式：2 碼英文字軌 + 8 碼數字
+    if len(invoice_number) != 10:
+        raise ValueError(
+            f"發票號碼格式不合法：'{invoice_number}'，"
+            "應為 10 碼（2 碼英文字軌 + 8 碼數字）"
+        )
+
     if not (invoice_number[:2].isalpha() and invoice_number[2:].isdigit()):
         raise ValueError(
             f"發票號碼格式不合法：'{invoice_number}'，"

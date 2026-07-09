@@ -21,6 +21,12 @@ class Invoice(Base):
     category = Column(String, nullable=True, comment="AI 判斷的支出類別")
     recognition_method = Column(String, nullable=False, comment="辨識方式：qr_code 或 ai_vision")
     field_confidence = Column(JSON, nullable=True, comment="AI 辨識時各欄位信心分數，QR 解碼則為 null")
+    is_duplicate = Column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="是否疑似重複發票（同 invoice_number 已存在其他紀錄），由總務審核決定",
+    )
     status = Column(String, nullable=False, default="待審核", comment="狀態：待審核 / 已確認 / 已退回")
     reject_reason = Column(String, nullable=True, comment="總務退回時填寫的原因")
     image_url = Column(String, nullable=True, comment="圖片路徑")

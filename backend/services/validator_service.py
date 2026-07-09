@@ -7,6 +7,7 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
+from models.invoice import Invoice
 from utils.date_converter import convert_roc_to_ad
 from utils.tax_id_checksum import is_company_tax_id, validate_tax_id
 
@@ -51,8 +52,7 @@ class ValidatorService:
         Returns:
             轉換後的 Python date 物件。
         """
-        # TODO: 呼叫 utils/date_converter.py
-        raise NotImplementedError
+        return convert_roc_to_ad(date_str)
 
     def check_duplicate(self, invoice_number: str, db: Session) -> bool:
         """檢查發票號碼是否在全公司範圍內重複。
@@ -64,5 +64,9 @@ class ValidatorService:
         Returns:
             True 表示已存在（重複），False 表示不重複。
         """
-        # TODO: 查詢 invoices 資料表，比對 invoice_number
-        raise NotImplementedError
+        existing = (
+            db.query(Invoice)
+            .filter(Invoice.invoice_number == invoice_number)
+            .first()
+        )
+        return existing is not None

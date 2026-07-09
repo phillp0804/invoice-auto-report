@@ -4,13 +4,45 @@
 決定是否有權限存取該 API 端點。
 """
 
+import firebase_admin
 from fastapi import Depends, HTTPException, Request
+from firebase_admin import credentials
+from firebase_admin import auth as firebase_auth
+from firebase_admin import exceptions as firebase_exceptions
 from sqlalchemy.orm import Session
 
+from config import get_settings
 from database import get_db
+from models.user import User
+
+_firebase_app: firebase_admin.App | None = None
 
 
-def get_current_user(request: Request, db: Session = Depends(get_db)):
+def get_firebase_app() -> firebase_admin.App:
+    """取得 Firebase Admin App 單例，第一次呼叫時才初始化。
+
+    整個後端共用同一個 Firebase App 實例（例如 auth_router.py 的登入端點
+    也會呼叫這個函式）：firebase_admin.initialize_app() 對同一個 app name
+    重複呼叫會拋出例外，所以初始化邏輯只能有這一份。
+    """
+    global _firebase_app
+    if _firebase_app is None:
+        settings = get_settings()
+        cred = credentials.Certificate(
+            {
+                "type": "service_account",
+                "project_id": settings.firebase_project_id,
+                "client_email": settings.firebase_client_email,
+                # .env 中的換行通常會被跳脫成 "\n" 字面字串，需還原成真正換行
+                "private_key": settings.firebase_private_key.replace("\\n", "\n"),
+                "token_uri": "https://oauth2.googleapis.com/token",
+            }
+        )
+        _firebase_app = firebase_admin.initialize_app(cred)
+    return _firebase_app
+
+
+def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     """從請求中取得當前登入的使用者。
 
     從 Authorization header 取得 Firebase token，
@@ -24,11 +56,29 @@ def get_current_user(request: Request, db: Session = Depends(get_db)):
         使用者 ORM 物件。
 
     Raises:
-        HTTPException: token 無效或使用者不存在。
+        HTTPException: token 缺失、格式錯誤、驗證失敗，或使用者不存在。
     """
-    # TODO: 驗證 Authorization header 中的 Firebase token
-    # TODO: 從 token 取得 email，查詢 users 資料表
-    raise NotImplementedError
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(
+            status_code=401, detail="缺少或格式錯誤的 Authorization header"
+        )
+
+    try:
+        decoded_token = firebase_auth.verify_id_token(token, app=get_firebase_app())
+    except (firebase_exceptions.FirebaseError, ValueError) as exc:
+        raise HTTPException(status_code=401, detail="Firebase token 無效") from exc
+
+    email = decoded_token.get("email")
+    if not email:
+        raise HTTPException(status_code=401, detail="Token 缺少 email 欄位")
+
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="使用者不存在，請聯繫總務建立帳號")
+
+    return user
 
 
 def require_role(required_role: str):

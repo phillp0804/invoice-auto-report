@@ -33,6 +33,16 @@ desktop.ini
 .coverage
 htmlcov/
 
+# SQLite 開發資料庫
+*.db
+
+# 發票圖片備份（本機儲存，內含使用者上傳的圖片，不可上傳）
+uploads/
+
+# Node / 前端
+node_modules/
+frontend/dist/
+
 # uv
 .python-version
 

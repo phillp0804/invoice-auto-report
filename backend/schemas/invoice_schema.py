@@ -1,6 +1,6 @@
 """發票相關的 Pydantic schema。"""
 
-from datetime import date, datetime
+import datetime as dt
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -41,15 +41,16 @@ class InvoiceResponse(BaseModel):
     invoice_number: str
     tax_id: str | None = None
     tax_id_valid: bool | None = None
-    date: date | None = None
+    date: dt.date | None = None
     amount: Decimal | None = None
     category: str | None = None
     recognition_method: str
     field_confidence: dict | None = None
+    is_duplicate: bool = False
     status: str
     reject_reason: str | None = None
     image_url: str | None = None
-    created_at: datetime | None = None
+    created_at: dt.datetime | None = None
 
     model_config = {"from_attributes": True}
 

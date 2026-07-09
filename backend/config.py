@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # 資料庫
     database_url: str = "sqlite:///./invoices.db"
 
+    # 發票圖片備份儲存目錄
+    upload_dir: str = "uploads"
+
     # 公司統編（用於比對發票買方統編是否為本公司）
     company_tax_id: str = ""
 
