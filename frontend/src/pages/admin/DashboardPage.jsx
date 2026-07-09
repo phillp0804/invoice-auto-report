@@ -39,8 +39,8 @@ export default function DashboardPage() {
   const now = new Date();
   const [year, setYear] = useState(String(now.getFullYear()));
   const [month, setMonth] = useState(String(now.getMonth() + 1));
-  // 初始不篩選（顯示全部已確認發票），套用篩選後才帶 year/month 查詢
-  const [filter, setFilter] = useState({});
+  // 預設顯示本月彙整，清除篩選後才會改成顯示全部已確認發票
+  const [filter, setFilter] = useState({ year: now.getFullYear(), month: now.getMonth() + 1 });
   const [dashboard, setDashboard] = useState(null);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState(null);

@@ -79,7 +79,7 @@
 ```
 invoice-auto-report/
 ├── backend/                    # FastAPI 後端
-│   ├── main.py                  # 應用程式進入點
+│   ├── main.py                  # 應用程式進入點（含 CORS 設定）
 │   ├── config.py                # 環境變數讀取、設定管理
 │   ├── database.py              # 資料庫連線與 session 管理
 │   ├── requirements.txt
@@ -96,13 +96,14 @@ invoice-auto-report/
 │   │   ├── auth_router.py
 │   │   ├── invoice_router.py
 │   │   ├── admin_router.py      # 總務專屬路由
-│   │   └── webhook_router.py    # n8n webhook 端點
+│   │   └── webhook_router.py    # n8n webhook 端點（密鑰驗證已完成，處理邏輯留給使用者接）
 │   ├── services/                # 核心業務邏輯
 │   │   ├── qr_service.py        # QR Code 偵測與解碼
 │   │   ├── ocr_service.py       # Claude Vision 辨識
 │   │   ├── validator_service.py # 統編驗證、重複偵測
 │   │   ├── classifier_service.py # AI 支出分類
 │   │   ├── report_service.py    # 報表彙整與匯出
+│   │   ├── storage_service.py   # 發票圖片壓縮備份（檔名：[姓名][日期][發票號碼]）
 │   │   ├── claude_client.py     # Claude API 共用客戶端
 │   │   └── prompts/             # AI Prompt 模板
 │   ├── middleware/
@@ -110,11 +111,18 @@ invoice-auto-report/
 │   ├── utils/                   # 純函式工具
 │   │   ├── tax_id_checksum.py   # 統編檢查碼演算法
 │   │   ├── date_converter.py    # 民國年轉西元年
-│   │   └── qr_parser.py        # QR Code 字串解析
-│   └── tests/                   # 單元測試
+│   │   ├── qr_parser.py        # QR Code 字串解析
+│   │   └── image_compressor.py  # 圖片壓縮
+│   └── tests/                   # 單元測試（139 個）
+├── frontend/                    # React 前端（Vite）
+│   └── src/
+│       ├── pages/                # LoginPage + employee/admin 六個頁面
+│       ├── components/           # InvoiceCard、StatusBadge
+│       ├── api/                  # invoiceApi.js（封裝所有後端呼叫）
+│       └── auth/                 # firebaseConfig、AuthContext（Context API 管理登入狀態）
 └── docs/                        # 專案文件
-    ├── 專案計畫書_v2.3.md
-    └── 程式架構文件.md
+    ├── 發票自動報帳系統_專案計畫書_v2.3.md
+    └── 發票自動報帳系統_程式架構文件.md
 ```
 
 ---
@@ -231,7 +239,16 @@ uv run pytest tests/ -v
 
 ## 📝 開發狀態
 
-本專案目前為 AI 課程作品集專案，持續開發中。
+本專案為 AI 課程作品集專案。目前進度：
+
+- ✅ **後端核心邏輯全部完成**：QR/AI 雙軌辨識、統編檢查碼與重複發票偵測、AI 支出分類、
+  圖片壓縮備份（依 `[姓名][日期][發票號碼]` 命名）、Firebase 登入與角色權限驗證、
+  總務審核與 Excel 報表匯出，共 139 個單元測試全數通過
+- ✅ **前端六個頁面全部完成**：登入、上傳發票（含信心不足確認畫面）、我的上傳紀錄、
+  總務儀表板、待審核清單（核准/退回）、匯出報表，已串接後端 API
+- ⏳ **n8n 自動化流程尚未串接**（退回通知、定期彙整寄送、待審核提醒），
+  後端已完成 webhook 密鑰驗證，實際整合留給使用者自行接手
+- ⏳ 圖片備份僅本機儲存、尚無雲端儲存與檔案清理策略；重複發票偵測只在上傳當下判斷一次
 
 ---
 
