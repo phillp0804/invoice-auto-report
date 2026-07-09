@@ -125,8 +125,9 @@ invoice-auto-report/
 
 - Python 3.10+
 - [uv](https://docs.astral.sh/uv/)（Python 套件管理工具）
+- Node.js 18+（前端）
 
-### 安裝與設定
+### 後端安裝與設定
 
 ```bash
 # 1. 複製專案
@@ -146,7 +147,7 @@ cp .env.example .env
 uv run uvicorn main:app --reload
 ```
 
-### 環境變數說明
+### 後端環境變數說明
 
 | 變數名稱 | 說明 |
 |---|---|
@@ -155,8 +156,33 @@ uv run uvicorn main:app --reload
 | `FIREBASE_PRIVATE_KEY` | Firebase 私鑰 |
 | `FIREBASE_CLIENT_EMAIL` | Firebase 服務帳號 Email |
 | `DATABASE_URL` | 資料庫連線字串（預設 SQLite） |
+| `UPLOAD_DIR` | 發票圖片備份儲存目錄（預設 `uploads`） |
+| `COMPANY_TAX_ID` | 本公司統一編號（比對發票買方統編用） |
 | `N8N_WEBHOOK_URL` | n8n Webhook 端點 URL |
 | `N8N_WEBHOOK_SECRET` | n8n Webhook 驗證密鑰 |
+
+### 前端安裝與設定
+
+```bash
+cd frontend
+npm install
+
+cp .env.example .env
+# 編輯 .env 填入 Firebase 前端設定與後端 API 位置
+
+npm run dev
+```
+
+前端預設在 `http://localhost:5173`，後端須先啟動於 `http://localhost:8000`（已在 `main.py` 設定 CORS 允許此來源）。
+
+### 前端環境變數說明
+
+| 變數名稱 | 說明 |
+|---|---|
+| `VITE_API_BASE_URL` | 後端 API 位置（預設 `http://localhost:8000`） |
+| `VITE_FIREBASE_API_KEY` | Firebase 前端設定（與後端同一個 Firebase 專案） |
+| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain |
+| `VITE_FIREBASE_PROJECT_ID` | Firebase 專案 ID |
 
 ---
 
