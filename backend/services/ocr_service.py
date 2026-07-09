@@ -1,30 +1,31 @@
 """AI 辨識服務（無 QR Code 時的備援路徑）。
 
-呼叫 Claude Vision API 辨識發票圖片內容，回傳結構化資料與各欄位信心分數。
+呼叫 AI（Claude 或 Gemini，依 AI_PROVIDER 設定）辨識發票圖片內容，
+回傳結構化資料與各欄位信心分數。
 """
 
-import base64
 import io
 import json
 
 from PIL import Image
 
 from schemas.invoice_schema import FieldConfidence, InvoiceRecognitionResult
-from services.claude_client import ClaudeClient
 from services.prompts.recognize_invoice_prompt import RECOGNIZE_INVOICE_SYSTEM_PROMPT
 from utils.image_compressor import compress_image as _compress_image
+from utils.json_extractor import parse_json_response
 
 
 class OcrService:
-    """Claude Vision AI 辨識服務。"""
+    """AI Vision 辨識服務。"""
 
-    def __init__(self, api_key: str):
+    def __init__(self, ai_client):
         """初始化 OcrService。
 
         Args:
-            api_key: Anthropic API 金鑰。
+            ai_client: 實作 send_text/send_image 介面的 AI 客戶端
+                （services.ai_client.create_ai_client() 建立）。
         """
-        self.claude_client = ClaudeClient(api_key)
+        self.ai_client = ai_client
 
     def compress_image(self, image: Image.Image, max_edge: int = 1500) -> Image.Image:
         """壓縮圖片至指定最長邊，降低 Token 消耗。
@@ -51,34 +52,26 @@ class OcrService:
             辨識結果，包含各欄位信心分數（recognition_method="ai_vision"）。
 
         Raises:
-            RuntimeError: Claude 回傳內容不是合法 JSON。
+            RuntimeError: AI 回傳內容不是合法 JSON。
         """
         compressed = self.compress_image(image)
 
         buffer = io.BytesIO()
         compressed.save(buffer, format="JPEG")
-        image_base64 = base64.standard_b64encode(buffer.getvalue()).decode("utf-8")
 
-        response_text = self.claude_client.send_message(
+        response_text = self.ai_client.send_image(
             system_prompt=RECOGNIZE_INVOICE_SYSTEM_PROMPT,
-            user_content=[
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image_base64,
-                    },
-                },
-                {"type": "text", "text": "請辨識這張發票圖片的內容。"},
-            ],
+            image_bytes=buffer.getvalue(),
+            media_type="image/jpeg",
+            user_text="請辨識這張發票圖片的內容。",
+            max_tokens=2048,
         )
 
         try:
-            data = json.loads(response_text)
+            data = parse_json_response(response_text)
         except json.JSONDecodeError as exc:
             raise RuntimeError(
-                f"Claude 回傳的辨識結果不是合法 JSON：{response_text}"
+                f"AI 回傳的辨識結果不是合法 JSON：{response_text}"
             ) from exc
 
         confidence_data = data.get("confidence") or {}

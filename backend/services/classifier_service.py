@@ -1,12 +1,12 @@
 """AI 支出分類服務。
 
-呼叫 Claude API，依照固定分類清單判斷發票的支出類別。
+呼叫 AI（Claude 或 Gemini，依 AI_PROVIDER 設定），依照固定分類清單判斷發票的支出類別。
 """
 
 import json
 
-from services.claude_client import ClaudeClient
 from services.prompts.classify_invoice_prompt import build_classify_invoice_system_prompt
+from utils.json_extractor import parse_json_response
 
 # 預定義的支出分類清單
 EXPENSE_CATEGORIES = [
@@ -26,13 +26,14 @@ _FALLBACK_CATEGORY = "其他"
 class ClassifierService:
     """AI 支出分類服務。"""
 
-    def __init__(self, api_key: str):
+    def __init__(self, ai_client):
         """初始化 ClassifierService。
 
         Args:
-            api_key: Anthropic API 金鑰。
+            ai_client: 實作 send_text/send_image 介面的 AI 客戶端
+                （services.ai_client.create_ai_client() 建立）。
         """
-        self.claude_client = ClaudeClient(api_key)
+        self.ai_client = ai_client
         self.categories = EXPENSE_CATEGORIES
 
     def classify(self, items: list[str], amount: float | None = None) -> str:
@@ -51,13 +52,13 @@ class ClassifierService:
         if amount is not None:
             user_text += f"\n金額：{amount}"
 
-        response_text = self.claude_client.send_message(
+        response_text = self.ai_client.send_text(
             system_prompt=build_classify_invoice_system_prompt(self.categories),
-            user_content=[{"type": "text", "text": user_text}],
+            user_text=user_text,
         )
 
         try:
-            data = json.loads(response_text)
+            data = parse_json_response(response_text)
         except json.JSONDecodeError:
             return _FALLBACK_CATEGORY
 

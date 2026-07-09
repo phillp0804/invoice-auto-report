@@ -63,7 +63,7 @@
 
 | 模組 | 技術 | 說明 |
 |---|---|---|
-| 影像辨識 | Claude API（多模態） | 無 QR Code 時的備援辨識路徑 |
+| 影像辨識 | Claude API 或 Gemini API（多模態） | 無 QR Code 時的備援辨識路徑，透過 `AI_PROVIDER` 切換廠商 |
 | QR Code 解碼 | pyzbar / Pillow | 優先辨識電子發票 QR Code，降低 AI 呼叫成本 |
 | 後端框架 | FastAPI（Python） | 含角色權限中介層（middleware） |
 | 規則引擎 | 純 Python 邏輯 | 統編檢查碼、民國年轉換、跨員工重複比對 |
@@ -99,12 +99,14 @@ invoice-auto-report/
 │   │   └── webhook_router.py    # n8n webhook 端點（密鑰驗證已完成，處理邏輯留給使用者接）
 │   ├── services/                # 核心業務邏輯
 │   │   ├── qr_service.py        # QR Code 偵測與解碼
-│   │   ├── ocr_service.py       # Claude Vision 辨識
+│   │   ├── ocr_service.py       # AI Vision 辨識
 │   │   ├── validator_service.py # 統編驗證、重複偵測
 │   │   ├── classifier_service.py # AI 支出分類
 │   │   ├── report_service.py    # 報表彙整與匯出
 │   │   ├── storage_service.py   # 發票圖片壓縮備份（檔名：[姓名][日期][發票號碼]）
 │   │   ├── claude_client.py     # Claude API 共用客戶端
+│   │   ├── gemini_client.py     # Gemini API 共用客戶端（與 claude_client 同介面）
+│   │   ├── ai_client.py         # 依 AI_PROVIDER 設定挑選 Claude/Gemini
 │   │   └── prompts/             # AI Prompt 模板
 │   ├── middleware/
 │   │   └── auth_middleware.py   # 角色權限驗證
@@ -159,7 +161,10 @@ uv run uvicorn main:app --reload
 
 | 變數名稱 | 說明 |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude API 金鑰 |
+| `AI_PROVIDER` | AI 辨識/分類要用哪個廠商：`claude` 或 `gemini`（預設 `claude`） |
+| `ANTHROPIC_API_KEY` | Claude API 金鑰（`AI_PROVIDER=claude` 時使用） |
+| `GEMINI_API_KEY` | Gemini API 金鑰（`AI_PROVIDER=gemini` 時使用；有免費額度） |
+| `GEMINI_MODEL` | Gemini 模型名稱（預設 `gemini-2.5-flash`） |
 | `FIREBASE_PROJECT_ID` | Firebase 專案 ID |
 | `FIREBASE_PRIVATE_KEY` | Firebase 私鑰 |
 | `FIREBASE_CLIENT_EMAIL` | Firebase 服務帳號 Email |

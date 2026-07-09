@@ -9,8 +9,9 @@ sqlalchemy>=2.0.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 
-# AI API（Claude Vision 辨識 & 分類）
+# AI API（Claude Vision 辨識 & 分類；可用 AI_PROVIDER 切換成 Gemini）
 anthropic>=0.30.0
+google-genai>=1.0.0
 
 # QR Code 偵測與解碼
 pyzbar>=0.1.9

@@ -20,6 +20,7 @@ from schemas.invoice_schema import (
     InvoiceListResponse,
     InvoiceResponse,
 )
+from services.ai_client import create_ai_client
 from services.classifier_service import ClassifierService
 from services.ocr_service import OcrService
 from services.qr_service import QrService
@@ -43,11 +44,13 @@ async def upload_invoice(
     except UnidentifiedImageError as exc:
         raise HTTPException(status_code=400, detail="無法辨識的圖片格式") from exc
 
+    settings = get_settings()
+    ai_client = create_ai_client(settings)
+
     # 辨識：QR Code 優先，偵測不到才走 AI 辨識備援（core rule 11）
     recognition = QrService().detect_and_decode(image)
     if recognition is None:
-        settings = get_settings()
-        recognition = OcrService(settings.anthropic_api_key).recognize(image)
+        recognition = OcrService(ai_client).recognize(image)
 
     if not recognition.invoice_number:
         raise HTTPException(
@@ -67,8 +70,7 @@ async def upload_invoice(
         except ValueError:
             invoice_date = None
 
-    settings = get_settings()
-    category = ClassifierService(settings.anthropic_api_key).classify(
+    category = ClassifierService(ai_client).classify(
         items=recognition.items or [], amount=recognition.amount
     )
 

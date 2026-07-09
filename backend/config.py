@@ -7,7 +7,12 @@ class Settings(BaseSettings):
     """應用程式設定，從 .env 檔案或環境變數讀取。"""
 
     # AI API
+    # AI_PROVIDER 決定 ocr_service/classifier_service 實際呼叫哪個廠商，
+    # 兩邊都保留可用，切換不需要改程式碼（見 services/ai_client.py）
+    ai_provider: str = "claude"  # "claude" 或 "gemini"
     anthropic_api_key: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
     # Firebase
     firebase_project_id: str = ""

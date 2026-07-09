@@ -1,7 +1,7 @@
-"""AI 辨識服務（OcrService）的單元測試（不呼叫真實 Claude API）。"""
+"""AI 辨識服務（OcrService）的單元測試（不呼叫真實 AI API）。"""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image
@@ -10,12 +10,10 @@ from services.ocr_service import OcrService
 
 
 def _make_service() -> tuple[OcrService, MagicMock]:
-    """建立 OcrService，並回傳其內部 ClaudeClient 的 mock 實例。"""
-    with patch("services.ocr_service.ClaudeClient") as mock_claude_client_cls:
-        mock_client = MagicMock()
-        mock_claude_client_cls.return_value = mock_client
-        service = OcrService(api_key="test-key")
-    return service, mock_client
+    """建立 OcrService，注入一個 mock 的 ai_client（介面與 ClaudeClient/GeminiClient 一致）。"""
+    mock_ai_client = MagicMock()
+    service = OcrService(ai_client=mock_ai_client)
+    return service, mock_ai_client
 
 
 class TestCompressImage:
@@ -36,8 +34,8 @@ class TestRecognize:
     """recognize() 測試。"""
 
     def test_valid_response_maps_to_recognition_result(self):
-        service, mock_client = _make_service()
-        mock_client.send_message.return_value = json.dumps(
+        service, mock_ai_client = _make_service()
+        mock_ai_client.send_image.return_value = json.dumps(
             {
                 "invoice_number": "AB12345678",
                 "tax_id": "04595257",
@@ -64,9 +62,28 @@ class TestRecognize:
         assert result.field_confidence.invoice_number == "high"
         assert result.field_confidence.items == "low"
 
+    def test_response_wrapped_in_markdown_code_fence_still_parses(self):
+        """迴歸測試：Gemini 實測會把 JSON 包在 ```json ... ``` 裡，即使
+        prompt 要求「僅輸出 JSON」，這裡確保這種格式不會導致辨識失敗。"""
+        service, mock_ai_client = _make_service()
+        raw_json = json.dumps(
+            {
+                "invoice_number": "AB12345678",
+                "tax_id": None,
+                "date": None,
+                "amount": None,
+                "items": None,
+            }
+        )
+        mock_ai_client.send_image.return_value = f"```json\n{raw_json}\n```"
+
+        result = service.recognize(Image.new("RGB", (500, 500)))
+
+        assert result.invoice_number == "AB12345678"
+
     def test_missing_confidence_field_does_not_crash(self):
-        service, mock_client = _make_service()
-        mock_client.send_message.return_value = json.dumps(
+        service, mock_ai_client = _make_service()
+        mock_ai_client.send_image.return_value = json.dumps(
             {
                 "invoice_number": None,
                 "tax_id": None,
@@ -82,15 +99,15 @@ class TestRecognize:
         assert result.invoice_number is None
 
     def test_invalid_json_raises_runtime_error(self):
-        service, mock_client = _make_service()
-        mock_client.send_message.return_value = "這不是 JSON"
+        service, mock_ai_client = _make_service()
+        mock_ai_client.send_image.return_value = "這不是 JSON"
 
         with pytest.raises(RuntimeError, match="不是合法 JSON"):
             service.recognize(Image.new("RGB", (500, 500)))
 
-    def test_sends_jpeg_image_content_to_claude(self):
-        service, mock_client = _make_service()
-        mock_client.send_message.return_value = json.dumps(
+    def test_sends_jpeg_image_to_ai_client(self):
+        service, mock_ai_client = _make_service()
+        mock_ai_client.send_image.return_value = json.dumps(
             {
                 "invoice_number": None,
                 "tax_id": None,
@@ -102,8 +119,7 @@ class TestRecognize:
 
         service.recognize(Image.new("RGB", (500, 500)))
 
-        _, kwargs = mock_client.send_message.call_args
-        image_block = kwargs["user_content"][0]
-        assert image_block["type"] == "image"
-        assert image_block["source"]["media_type"] == "image/jpeg"
-        assert image_block["source"]["type"] == "base64"
+        _, kwargs = mock_ai_client.send_image.call_args
+        assert kwargs["media_type"] == "image/jpeg"
+        assert isinstance(kwargs["image_bytes"], bytes)
+        assert kwargs["user_text"]

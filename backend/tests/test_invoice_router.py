@@ -1,7 +1,8 @@
 """發票路由（invoice_router）的單元測試。
 
 直接呼叫路由函式（不透過 TestClient），QrService / OcrService /
-ClassifierService 全程 mock，避免真的解碼圖片或呼叫 Claude API。
+ClassifierService 全程 mock，避免真的解碼圖片或呼叫 AI API。
+create_ai_client 也全程 mock，避免測試依賴本機 .env 的實際 AI 金鑰設定。
 save_invoice_image 也全程 mock，避免測試時真的寫檔到 uploads/。
 ValidatorService 使用真實實作，因為它是純函式邏輯，值得順帶驗證整合行為。
 """
@@ -56,6 +57,15 @@ def mock_storage():
         "routers.invoice_router.save_invoice_image", return_value="uploads/mock.jpg"
     ) as mock_save:
         yield mock_save
+
+
+@pytest.fixture(autouse=True)
+def mock_ai_client():
+    """避免依賴本機 .env 實際的 AI 金鑰設定；廠商挑選邏輯已在 test_ai_client.py 驗證。"""
+    with patch(
+        "routers.invoice_router.create_ai_client", return_value=MagicMock()
+    ) as mock_factory:
+        yield mock_factory
 
 
 def _qr_recognition() -> InvoiceRecognitionResult:

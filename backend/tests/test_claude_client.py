@@ -14,6 +14,14 @@ def _text_block(text: str) -> SimpleNamespace:
     return SimpleNamespace(type="text", text=text)
 
 
+def _make_client():
+    with patch("services.claude_client.anthropic.Anthropic") as mock_anthropic:
+        mock_client = MagicMock()
+        mock_anthropic.return_value = mock_client
+        service = ClaudeClient(api_key="test-key")
+    return service, mock_client
+
+
 class TestClaudeClientInit:
     """初始化行為測試。"""
 
@@ -24,54 +32,37 @@ class TestClaudeClientInit:
         mock_anthropic.assert_called_once_with(api_key="test-key", max_retries=2)
 
 
-class TestSendMessage:
-    """send_message() 測試。"""
+class TestSendText:
+    """send_text() 測試。"""
 
     def test_returns_concatenated_text_blocks(self):
-        with patch("services.claude_client.anthropic.Anthropic") as mock_anthropic:
-            mock_client = MagicMock()
-            mock_anthropic.return_value = mock_client
-            mock_client.messages.create.return_value = SimpleNamespace(
-                content=[_text_block("Hello, "), _text_block("world!")]
-            )
+        service, mock_client = _make_client()
+        mock_client.messages.create.return_value = SimpleNamespace(
+            content=[_text_block("Hello, "), _text_block("world!")]
+        )
 
-            service = ClaudeClient(api_key="test-key")
-            result = service.send_message(
-                system_prompt="system", user_content=[{"type": "text", "text": "hi"}]
-            )
+        result = service.send_text(system_prompt="system", user_text="hi")
 
         assert result == "Hello, world!"
 
     def test_ignores_non_text_blocks(self):
-        with patch("services.claude_client.anthropic.Anthropic") as mock_anthropic:
-            mock_client = MagicMock()
-            mock_anthropic.return_value = mock_client
-            mock_client.messages.create.return_value = SimpleNamespace(
-                content=[
-                    SimpleNamespace(type="thinking", thinking="..."),
-                    _text_block("final answer"),
-                ]
-            )
+        service, mock_client = _make_client()
+        mock_client.messages.create.return_value = SimpleNamespace(
+            content=[
+                SimpleNamespace(type="thinking", thinking="..."),
+                _text_block("final answer"),
+            ]
+        )
 
-            service = ClaudeClient(api_key="test-key")
-            result = service.send_message(system_prompt="s", user_content=[])
+        result = service.send_text(system_prompt="s", user_text="")
 
         assert result == "final answer"
 
     def test_sends_expected_request_params(self):
-        with patch("services.claude_client.anthropic.Anthropic") as mock_anthropic:
-            mock_client = MagicMock()
-            mock_anthropic.return_value = mock_client
-            mock_client.messages.create.return_value = SimpleNamespace(
-                content=[_text_block("ok")]
-            )
+        service, mock_client = _make_client()
+        mock_client.messages.create.return_value = SimpleNamespace(content=[_text_block("ok")])
 
-            service = ClaudeClient(api_key="test-key")
-            service.send_message(
-                system_prompt="你是發票辨識助手",
-                user_content=[{"type": "text", "text": "辨識這張發票"}],
-                max_tokens=2048,
-            )
+        service.send_text(system_prompt="你是發票辨識助手", user_text="辨識這張發票", max_tokens=2048)
 
         mock_client.messages.create.assert_called_once_with(
             model="claude-opus-4-8",
@@ -86,14 +77,35 @@ class TestSendMessage:
         )
 
     def test_api_error_wrapped_as_runtime_error(self):
-        with patch("services.claude_client.anthropic.Anthropic") as mock_anthropic:
-            mock_client = MagicMock()
-            mock_anthropic.return_value = mock_client
-            request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
-            mock_client.messages.create.side_effect = APIError(
-                "rate limit exceeded", request, body=None
-            )
+        service, mock_client = _make_client()
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        mock_client.messages.create.side_effect = APIError(
+            "rate limit exceeded", request, body=None
+        )
 
-            service = ClaudeClient(api_key="test-key")
-            with pytest.raises(RuntimeError, match="Claude API 呼叫失敗"):
-                service.send_message(system_prompt="s", user_content=[])
+        with pytest.raises(RuntimeError, match="Claude API 呼叫失敗"):
+            service.send_text(system_prompt="s", user_text="")
+
+
+class TestSendImage:
+    """send_image() 測試。"""
+
+    def test_sends_image_and_text_content_blocks(self):
+        service, mock_client = _make_client()
+        mock_client.messages.create.return_value = SimpleNamespace(content=[_text_block("ok")])
+
+        result = service.send_image(
+            system_prompt="system",
+            image_bytes=b"\xff\xd8\xff",
+            media_type="image/jpeg",
+            user_text="請辨識這張發票圖片的內容。",
+            max_tokens=512,
+        )
+
+        assert result == "ok"
+        _, kwargs = mock_client.messages.create.call_args
+        content = kwargs["messages"][0]["content"]
+        assert content[0]["type"] == "image"
+        assert content[0]["source"]["media_type"] == "image/jpeg"
+        assert content[0]["source"]["type"] == "base64"
+        assert content[1] == {"type": "text", "text": "請辨識這張發票圖片的內容。"}
