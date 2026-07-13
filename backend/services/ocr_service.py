@@ -79,6 +79,7 @@ class OcrService:
         return InvoiceRecognitionResult(
             invoice_number=data.get("invoice_number"),
             tax_id=data.get("tax_id"),
+            buyer_tax_id=data.get("buyer_tax_id") or "00000000",
             date=data.get("date"),
             amount=data.get("amount"),
             items=data.get("items"),

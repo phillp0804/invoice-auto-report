@@ -1,9 +1,9 @@
 nav a {
   text-decoration: none;
-  color: #333;
+  color: var(--color-text);
   font-weight: 500;
 }
 
 nav a:hover {
-  text-decoration: underline;
+  color: var(--color-primary);
 }

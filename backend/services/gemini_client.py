@@ -11,6 +11,8 @@ from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
 
+from services.ai_errors import AiQuotaExceededError
+
 
 class GeminiClient:
     """Gemini API 底層呼叫客戶端。"""
@@ -65,7 +67,8 @@ class GeminiClient:
         """呼叫 Gemini API 並回傳文字內容。
 
         Raises:
-            RuntimeError: Gemini API 呼叫失敗（例如認證錯誤、速率限制、伺服器錯誤等）。
+            AiQuotaExceededError: 額度或速率限制已達上限（429）。
+            RuntimeError: 其他 Gemini API 呼叫失敗（例如認證錯誤、伺服器錯誤等）。
         """
         try:
             response = self._client.models.generate_content(
@@ -78,6 +81,8 @@ class GeminiClient:
                 ),
             )
         except genai_errors.APIError as exc:
+            if exc.code == 429:
+                raise AiQuotaExceededError(f"Gemini API 額度已用完：{exc}") from exc
             raise RuntimeError(f"Gemini API 呼叫失敗：{exc}") from exc
 
         return response.text or ""

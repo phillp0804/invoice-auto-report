@@ -47,7 +47,12 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
-  const login = () => signInWithPopup(auth, new GoogleAuthProvider());
+  const login = () => {
+    setError(null);
+    return signInWithPopup(auth, new GoogleAuthProvider()).catch((err) => {
+      setError(`${err.code ?? "登入失敗"}：${err.message}`);
+    });
+  };
   const logout = () => signOut(auth);
 
   return (

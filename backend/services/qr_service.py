@@ -36,6 +36,7 @@ class QrService:
             return InvoiceRecognitionResult(
                 invoice_number=qr_data.invoice_number,
                 tax_id=qr_data.seller_tax_id,
+                buyer_tax_id=qr_data.buyer_tax_id,
                 date=qr_data.date,
                 amount=float(qr_data.total_amount),
                 items=None,

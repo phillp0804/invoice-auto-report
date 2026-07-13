@@ -6,6 +6,7 @@ from decimal import Decimal
 from io import BytesIO
 
 import openpyxl
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from sqlalchemy.orm import Session
 
 from models.invoice import Invoice
@@ -21,6 +22,13 @@ _CONFIRMED_STATUS = "已確認"
 _PENDING_STATUS = "待審核"
 
 _GROUP_BY_OPTIONS = ("department", "employee", "category")
+
+_AMOUNT_FORMAT = "#,##0"
+_HEADER_FONT = Font(bold=True, color="FFFFFF")
+_HEADER_FILL = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+_HEADER_ALIGNMENT = Alignment(horizontal="center", vertical="center")
+_TOTAL_FONT = Font(bold=True)
+_TOTAL_BORDER = Border(top=Side(style="thin"))
 
 
 class ReportService:
@@ -131,10 +139,29 @@ class ReportService:
         workbook = openpyxl.Workbook()
         sheet = workbook.active
         sheet.title = f"{year}-{month:02d} 報表"
+
         sheet.append([column_label, "金額", "件數"])
+        for cell in sheet[1]:
+            cell.font = _HEADER_FONT
+            cell.fill = _HEADER_FILL
+            cell.alignment = _HEADER_ALIGNMENT
+        sheet.freeze_panes = "A2"
+
         for summary in summaries:
             sheet.append([name_getter(summary), float(summary.total_amount), summary.count])
+
+        total_row = sheet.max_row + 1
         sheet.append(["總計", float(dashboard.total_amount), dashboard.total_count])
+        for cell in sheet[total_row]:
+            cell.font = _TOTAL_FONT
+            cell.border = _TOTAL_BORDER
+
+        for row in sheet.iter_rows(min_row=2, min_col=2, max_col=2):
+            row[0].number_format = _AMOUNT_FORMAT
+
+        sheet.column_dimensions["A"].width = 18
+        sheet.column_dimensions["B"].width = 14
+        sheet.column_dimensions["C"].width = 10
 
         buffer = BytesIO()
         workbook.save(buffer)

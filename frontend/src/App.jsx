@@ -8,6 +8,7 @@ import ReviewPage from "./pages/admin/ReviewPage.jsx";
 import MyInvoicesPage from "./pages/employee/MyInvoicesPage.jsx";
 import UploadPage from "./pages/employee/UploadPage.jsx";
 import LoginPage from "./pages/LoginPage.jsx";
+import { ThemeProvider, useTheme } from "./theme/ThemeContext.jsx";
 
 /** 依角色決定畫面是否可存取；後端 API 一樣會驗證 role，這裡只是隱藏畫面用。 */
 function ProtectedRoute({ children, requiredRole }) {
@@ -26,6 +27,21 @@ function ProtectedRoute({ children, requiredRole }) {
   return children;
 }
 
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+
+  return (
+    <button
+      type="button"
+      onClick={toggleTheme}
+      title={theme === "dark" ? "切換為淺色主題" : "切換為深色主題"}
+      style={{ padding: "0.4rem 0.7rem" }}
+    >
+      {theme === "dark" ? "☀️ 淺色" : "🌙 深色"}
+    </button>
+  );
+}
+
 function Nav() {
   const { user, logout } = useAuth();
 
@@ -34,7 +50,16 @@ function Nav() {
   }
 
   return (
-    <nav style={{ display: "flex", gap: "1rem", padding: "1rem", background: "#fff" }}>
+    <nav
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "1.5rem",
+        padding: "0.9rem 1.5rem",
+        background: "var(--color-surface)",
+        borderBottom: "1px solid var(--color-border)",
+      }}
+    >
       {user.role === "admin" ? (
         <>
           <Link to="/admin/dashboard">儀表板</Link>
@@ -47,9 +72,10 @@ function Nav() {
           <Link to="/employee/my-invoices">我的紀錄</Link>
         </>
       )}
-      <span style={{ marginLeft: "auto" }}>
+      <span style={{ marginLeft: "auto", color: "var(--color-text-secondary)" }}>
         {user.name}（{user.role === "admin" ? "總務" : "員工"}）
       </span>
+      <ThemeToggle />
       <button onClick={logout}>登出</button>
     </nav>
   );
@@ -65,7 +91,7 @@ function AppRoutes() {
   return (
     <>
       <Nav />
-      <main style={{ padding: "1.5rem" }}>
+      <main style={{ padding: "1.5rem", maxWidth: 960, margin: "0 auto" }}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<HomeRedirect />} />
@@ -117,8 +143,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppRoutes />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

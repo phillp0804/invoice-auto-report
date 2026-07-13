@@ -70,3 +70,29 @@ def is_company_tax_id(buyer_tax_id: str, company_tax_id: str) -> bool:
         return False
 
     return buyer_tax_id == company_tax_id
+
+
+def classify_buyer_tax_id(buyer_tax_id: str | None, company_tax_id: str) -> str | None:
+    """判斷買方統編狀態，供總務審核時標註提醒。
+
+    財政部規範：一般消費者未提供買方統編時視為 "00000000"，
+    此函式將其歸類為「未打」而非「不符」，避免誤導總務誤判為異常發票。
+
+    Args:
+        buyer_tax_id: 發票上的買方統編（可能為 None 或 "00000000"）。
+        company_tax_id: 系統設定的公司統編，未設定時無法比對是否相符。
+
+    Returns:
+        "missing" 表示未打統編、"mismatch" 表示與公司統編不符、
+        None 表示相符或公司統編未設定（無法判斷）。
+    """
+    if not buyer_tax_id or buyer_tax_id == "00000000":
+        return "missing"
+
+    if not company_tax_id:
+        return None
+
+    if not is_company_tax_id(buyer_tax_id, company_tax_id):
+        return "mismatch"
+
+    return None

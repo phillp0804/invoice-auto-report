@@ -48,10 +48,20 @@ class TestQrServiceDetectAndDecode:
         assert result is not None
         assert result.invoice_number == "AB12345678"
         assert result.tax_id == "04595257"
+        assert result.buyer_tax_id == "00000000"
         assert result.date == "1130708"
         assert result.amount == float(0x41A)
         assert result.recognition_method == "qr_code"
         assert result.field_confidence is None
+
+    def test_buyer_tax_id_passed_through_when_present(self):
+        """買方統編非 00000000（例如公司報帳開立抬頭）時應正確帶出。"""
+        qr_bytes = _build_qr_string(buyer_tax_id="12345675").encode("utf-8")
+        with patch("services.qr_service.decode_qr_codes", return_value=[_decoded(qr_bytes)]):
+            result = self.service.detect_and_decode(image=object())
+
+        assert result is not None
+        assert result.buyer_tax_id == "12345675"
 
     def test_no_qr_code_detected_returns_none(self):
         """圖片中沒有 QR Code 時應回傳 None，交由 AI 辨識備援。"""

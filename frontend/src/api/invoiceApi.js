@@ -61,6 +61,29 @@ export function getMyInvoices() {
   return request("/invoices/my");
 }
 
+/**
+ * 取得發票原始備份圖片，回傳一個可用於 <img src> 的 blob 網址。
+ *
+ * 跟 downloadReportExcel 同樣的原因：圖片端點需要 Authorization header
+ * 做權限驗證，<img src="..."> 無法帶自訂 header，所以改用 fetch 手動取得。
+ * 呼叫端用完後應呼叫 URL.revokeObjectURL(url) 釋放記憶體。
+ */
+export async function getInvoiceImageUrl(invoiceId) {
+  const headers = {};
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/invoices/${invoiceId}/image`, { headers });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.detail || `取得發票圖片失敗（${response.status}）`);
+  }
+
+  const blob = await response.blob();
+  return window.URL.createObjectURL(blob);
+}
+
 // --- 總務端 ---
 
 export function getDashboard({ year, month } = {}) {

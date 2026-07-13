@@ -20,8 +20,9 @@ from sqlalchemy.orm import sessionmaker
 from database import Base
 from models.invoice import Invoice
 from models.user import User
-from routers.invoice_router import confirm_invoice, get_my_invoices, upload_invoice
+from routers.invoice_router import confirm_invoice, get_invoice_image, get_my_invoices, upload_invoice
 from schemas.invoice_schema import FieldConfidence, InvoiceConfirmRequest, InvoiceRecognitionResult
+from services.ai_errors import AiQuotaExceededError
 
 
 def _jpeg_upload_file(filename: str = "invoice.jpg") -> UploadFile:
@@ -206,6 +207,39 @@ class TestUploadInvoice:
         assert second.is_duplicate is True
         assert second.invoice_number == first.invoice_number
 
+    def test_ai_quota_exceeded_raises_503_with_clear_message(self, db_session, employee):
+        """AI 額度用完時應回傳明確的 503 訊息，而不是不明原因的 500。"""
+        with (
+            patch("routers.invoice_router.QrService") as mock_qr_cls,
+            patch("routers.invoice_router.OcrService") as mock_ocr_cls,
+        ):
+            mock_qr_cls.return_value.detect_and_decode.return_value = None
+            mock_ocr_cls.return_value.recognize.side_effect = AiQuotaExceededError("額度已用完")
+
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(
+                    upload_invoice(file=_jpeg_upload_file(), current_user=employee, db=db_session)
+                )
+
+        assert exc_info.value.status_code == 503
+        assert "額度" in exc_info.value.detail
+
+    def test_other_ai_failure_raises_502(self, db_session, employee):
+        """AI 服務其他非預期錯誤（非額度問題）應回傳 502，而不是不明原因的 500。"""
+        with (
+            patch("routers.invoice_router.QrService") as mock_qr_cls,
+            patch("routers.invoice_router.OcrService") as mock_ocr_cls,
+        ):
+            mock_qr_cls.return_value.detect_and_decode.return_value = None
+            mock_ocr_cls.return_value.recognize.side_effect = RuntimeError("AI 回傳的辨識結果不是合法 JSON")
+
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.run(
+                    upload_invoice(file=_jpeg_upload_file(), current_user=employee, db=db_session)
+                )
+
+        assert exc_info.value.status_code == 502
+
 
 class TestConfirmInvoice:
     """confirm_invoice() 測試。"""
@@ -340,6 +374,76 @@ class TestConfirmInvoice:
             )
 
         assert exc_info.value.status_code == 400
+
+
+class TestGetInvoiceImage:
+    """get_invoice_image() 測試。"""
+
+    def _invoice_with_image(self, db_session, employee, tmp_path) -> Invoice:
+        image_path = tmp_path / "invoice.jpg"
+        image_path.write_bytes(b"\xff\xd8\xff\xd9")  # 最小合法 JPEG bytes 不重要，檔案存在即可
+        invoice = Invoice(
+            user_id=employee.id,
+            invoice_number="AB12345678",
+            recognition_method="qr_code",
+            status="待審核",
+            image_url=str(image_path),
+        )
+        db_session.add(invoice)
+        db_session.commit()
+        db_session.refresh(invoice)
+        return invoice
+
+    def test_owner_can_access_own_invoice_image(self, db_session, employee, tmp_path):
+        invoice = self._invoice_with_image(db_session, employee, tmp_path)
+
+        response = get_invoice_image(invoice_id=invoice.id, current_user=employee, db=db_session)
+
+        assert response.path == invoice.image_url
+
+    def test_admin_can_access_any_invoice_image(self, db_session, employee, tmp_path):
+        admin = User(name="總務", email="admin@example.com", role="admin")
+        db_session.add(admin)
+        db_session.commit()
+        invoice = self._invoice_with_image(db_session, employee, tmp_path)
+
+        response = get_invoice_image(invoice_id=invoice.id, current_user=admin, db=db_session)
+
+        assert response.path == invoice.image_url
+
+    def test_other_employee_cannot_access_invoice_image(self, db_session, employee, tmp_path):
+        other_user = User(name="小華", email="hua@example.com", role="employee")
+        db_session.add(other_user)
+        db_session.commit()
+        invoice = self._invoice_with_image(db_session, employee, tmp_path)
+
+        with pytest.raises(HTTPException) as exc_info:
+            get_invoice_image(invoice_id=invoice.id, current_user=other_user, db=db_session)
+
+        assert exc_info.value.status_code == 403
+
+    def test_invoice_not_found_raises_404(self, db_session, employee):
+        with pytest.raises(HTTPException) as exc_info:
+            get_invoice_image(invoice_id=999, current_user=employee, db=db_session)
+
+        assert exc_info.value.status_code == 404
+
+    def test_missing_image_file_raises_404(self, db_session, employee):
+        invoice = Invoice(
+            user_id=employee.id,
+            invoice_number="AB12345678",
+            recognition_method="qr_code",
+            status="待審核",
+            image_url="uploads/does_not_exist.jpg",
+        )
+        db_session.add(invoice)
+        db_session.commit()
+        db_session.refresh(invoice)
+
+        with pytest.raises(HTTPException) as exc_info:
+            get_invoice_image(invoice_id=invoice.id, current_user=employee, db=db_session)
+
+        assert exc_info.value.status_code == 404
 
 
 class TestGetMyInvoices:

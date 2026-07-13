@@ -30,17 +30,29 @@ export default function InvoiceCard({ invoice }) {
         <dd>{invoice.amount != null ? `NT$ ${invoice.amount}` : "—"}</dd>
         <dt>類別</dt>
         <dd>{invoice.category ?? "—"}</dd>
-        <dt>統編</dt>
+        <dt>賣方統編</dt>
         <dd>
           {invoice.tax_id ?? "—"}
           {invoice.tax_id_valid === false && (
             <span style={{ color: "#c02929" }}>（檢查碼未通過）</span>
           )}
         </dd>
+        <dt>買方統編</dt>
+        <dd>
+          {invoice.buyer_tax_id && invoice.buyer_tax_id !== "00000000"
+            ? invoice.buyer_tax_id
+            : "—"}
+        </dd>
       </dl>
 
       {invoice.is_duplicate && (
         <p style={{ color: "#c02929", margin: "0.5rem 0 0" }}>⚠ 疑似重複發票，待總務確認</p>
+      )}
+      {invoice.buyer_tax_id_status === "missing" && (
+        <p style={{ color: "#c02929", margin: "0.5rem 0 0" }}>⚠ 未打統編</p>
+      )}
+      {invoice.buyer_tax_id_status === "mismatch" && (
+        <p style={{ color: "#c02929", margin: "0.5rem 0 0" }}>⚠ 買方統編非本公司</p>
       )}
       {invoice.status === "已退回" && invoice.reject_reason && (
         <p style={{ color: "#c02929", margin: "0.5rem 0 0" }}>退回原因：{invoice.reject_reason}</p>

@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-from anthropic import APIError
+from anthropic import APIError, RateLimitError
 
+from services.ai_errors import AiQuotaExceededError
 from services.claude_client import ClaudeClient
 
 
@@ -80,10 +81,22 @@ class TestSendText:
         service, mock_client = _make_client()
         request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
         mock_client.messages.create.side_effect = APIError(
-            "rate limit exceeded", request, body=None
+            "internal error", request, body=None
         )
 
         with pytest.raises(RuntimeError, match="Claude API 呼叫失敗"):
+            service.send_text(system_prompt="s", user_text="")
+
+    def test_rate_limit_error_wrapped_as_ai_quota_exceeded_error(self):
+        """429（額度/速率限制達上限）應拋出 AiQuotaExceededError，方便呼叫端分開處理。"""
+        service, mock_client = _make_client()
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(429, request=request)
+        mock_client.messages.create.side_effect = RateLimitError(
+            "rate limit exceeded", response=response, body=None
+        )
+
+        with pytest.raises(AiQuotaExceededError, match="Claude API 額度已用完"):
             service.send_text(system_prompt="s", user_text="")
 
 

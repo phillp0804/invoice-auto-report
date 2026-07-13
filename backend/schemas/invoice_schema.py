@@ -3,7 +3,10 @@
 import datetime as dt
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
+
+from config import get_settings
+from utils.tax_id_checksum import classify_buyer_tax_id
 
 
 class FieldConfidence(BaseModel):
@@ -18,7 +21,8 @@ class FieldConfidence(BaseModel):
 class InvoiceRecognitionResult(BaseModel):
     """AI / QR Code 辨識結果 schema。"""
     invoice_number: str | None = None
-    tax_id: str | None = None
+    tax_id: str | None = None  # 賣方統一編號
+    buyer_tax_id: str | None = None  # 買方統一編號，一般消費者發票依規範預設為 "00000000"
     date: str | None = None  # 原始日期字串（可能是民國年）
     amount: float | None = None
     items: list[str] | None = None
@@ -41,6 +45,7 @@ class InvoiceResponse(BaseModel):
     invoice_number: str
     tax_id: str | None = None
     tax_id_valid: bool | None = None
+    buyer_tax_id: str | None = None
     date: dt.date | None = None
     amount: Decimal | None = None
     category: str | None = None
@@ -53,6 +58,12 @@ class InvoiceResponse(BaseModel):
     created_at: dt.datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def buyer_tax_id_status(self) -> str | None:
+        """買方統編狀態："missing"（未打）/ "mismatch"（非本公司）/ None（正常）。"""
+        return classify_buyer_tax_id(self.buyer_tax_id, get_settings().company_tax_id)
 
 
 class InvoiceListResponse(BaseModel):

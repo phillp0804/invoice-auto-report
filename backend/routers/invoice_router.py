@@ -5,14 +5,16 @@
 
 import io
 from datetime import date
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 from config import get_settings
 from database import get_db
-from middleware.auth_middleware import require_role
+from middleware.auth_middleware import get_current_user, require_role
 from models.invoice import Invoice
 from models.user import User
 from schemas.invoice_schema import (
@@ -21,6 +23,7 @@ from schemas.invoice_schema import (
     InvoiceResponse,
 )
 from services.ai_client import create_ai_client
+from services.ai_errors import AiQuotaExceededError
 from services.classifier_service import ClassifierService
 from services.ocr_service import OcrService
 from services.qr_service import QrService
@@ -47,32 +50,41 @@ async def upload_invoice(
     settings = get_settings()
     ai_client = create_ai_client(settings)
 
-    # 辨識：QR Code 優先，偵測不到才走 AI 辨識備援（core rule 11）
-    recognition = QrService().detect_and_decode(image)
-    if recognition is None:
-        recognition = OcrService(ai_client).recognize(image)
+    try:
+        # 辨識：QR Code 優先，偵測不到才走 AI 辨識備援（core rule 11）
+        recognition = QrService().detect_and_decode(image)
+        if recognition is None:
+            recognition = OcrService(ai_client).recognize(image)
 
-    if not recognition.invoice_number:
-        raise HTTPException(
-            status_code=422, detail="無法辨識發票號碼，請確認拍攝清晰後重新上傳"
+        if not recognition.invoice_number:
+            raise HTTPException(
+                status_code=422, detail="無法辨識發票號碼，請確認拍攝清晰後重新上傳"
+            )
+
+        validator = ValidatorService()
+
+        tax_id_valid = (
+            validator.validate_tax_id(recognition.tax_id) if recognition.tax_id else None
         )
 
-    validator = ValidatorService()
+        invoice_date = None
+        if recognition.date:
+            try:
+                invoice_date = validator.convert_date(recognition.date)
+            except ValueError:
+                invoice_date = None
 
-    tax_id_valid = (
-        validator.validate_tax_id(recognition.tax_id) if recognition.tax_id else None
-    )
-
-    invoice_date = None
-    if recognition.date:
-        try:
-            invoice_date = validator.convert_date(recognition.date)
-        except ValueError:
-            invoice_date = None
-
-    category = ClassifierService(ai_client).classify(
-        items=recognition.items or [], amount=recognition.amount
-    )
+        category = ClassifierService(ai_client).classify(
+            items=recognition.items or [], amount=recognition.amount
+        )
+    except AiQuotaExceededError as exc:
+        raise HTTPException(
+            status_code=503, detail="AI 辨識額度已用完，請稍後再試"
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502, detail="AI 辨識服務發生錯誤，請稍後再試"
+        ) from exc
 
     # 重複發票偵測（core rule 2：確定性邏輯），存入但標記，交由總務審核決定
     is_duplicate = validator.check_duplicate(recognition.invoice_number, db)
@@ -91,6 +103,7 @@ async def upload_invoice(
         invoice_number=recognition.invoice_number,
         tax_id=recognition.tax_id,
         tax_id_valid=tax_id_valid,
+        buyer_tax_id=recognition.buyer_tax_id,
         date=invoice_date,
         amount=recognition.amount,
         category=category,
@@ -150,6 +163,29 @@ def confirm_invoice(
     db.refresh(invoice)
 
     return invoice
+
+
+@router.get("/{invoice_id}/image")
+def get_invoice_image(
+    invoice_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """取得發票原始備份圖片，供人工比對辨識結果與原圖。
+
+    僅總務（審核用）或該筆發票的上傳者本人（自己查看用）可存取，
+    避免任何登入使用者都能讀到別人的發票圖片（core rule 6）。
+    """
+    invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="找不到指定的發票")
+    if current_user.role != "admin" and current_user.id != invoice.user_id:
+        raise HTTPException(status_code=403, detail="無權限查看此發票圖片")
+
+    if not invoice.image_url or not Path(invoice.image_url).is_file():
+        raise HTTPException(status_code=404, detail="找不到發票圖片檔案")
+
+    return FileResponse(invoice.image_url, media_type="image/jpeg")
 
 
 @router.get("/my", response_model=InvoiceListResponse)

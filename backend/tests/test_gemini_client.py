@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from google.genai import errors as genai_errors
 
+from services.ai_errors import AiQuotaExceededError
 from services.gemini_client import GeminiClient
 
 
@@ -61,10 +62,20 @@ class TestSendText:
     def test_api_error_wrapped_as_runtime_error(self):
         service, mock_client, _ = _make_client()
         mock_client.models.generate_content.side_effect = genai_errors.APIError(
-            429, {"error": {"message": "rate limit exceeded"}}
+            500, {"error": {"message": "internal error"}}
         )
 
         with pytest.raises(RuntimeError, match="Gemini API 呼叫失敗"):
+            service.send_text(system_prompt="s", user_text="u")
+
+    def test_quota_exceeded_wrapped_as_ai_quota_exceeded_error(self):
+        """429（額度/速率限制達上限）應拋出 AiQuotaExceededError，方便呼叫端分開處理。"""
+        service, mock_client, _ = _make_client()
+        mock_client.models.generate_content.side_effect = genai_errors.APIError(
+            429, {"error": {"message": "quota exceeded"}}
+        )
+
+        with pytest.raises(AiQuotaExceededError, match="Gemini API 額度已用完"):
             service.send_text(system_prompt="s", user_text="u")
 
 

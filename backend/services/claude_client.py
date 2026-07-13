@@ -11,6 +11,8 @@ import base64
 
 import anthropic
 
+from services.ai_errors import AiQuotaExceededError
+
 # 統一在此處指定模型，避免各 service 各自寫死不同版本
 _MODEL = "claude-opus-4-8"
 
@@ -76,8 +78,8 @@ class ClaudeClient:
         """呼叫 Claude API 並合併回傳的所有 text 區塊。
 
         Raises:
-            RuntimeError: Claude API 呼叫失敗（例如認證錯誤、額度超過重試上限的
-                速率限制、伺服器錯誤等，SDK 已內建重試但仍失敗時拋出）。
+            AiQuotaExceededError: 額度或速率限制已達上限（429，SDK 重試後仍失敗）。
+            RuntimeError: 其他 Claude API 呼叫失敗（例如認證錯誤、伺服器錯誤等）。
         """
         try:
             response = self._client.messages.create(
@@ -86,6 +88,8 @@ class ClaudeClient:
                 system=system_prompt,
                 messages=[{"role": "user", "content": content}],
             )
+        except anthropic.RateLimitError as exc:
+            raise AiQuotaExceededError(f"Claude API 額度已用完：{exc}") from exc
         except anthropic.APIError as exc:
             raise RuntimeError(f"Claude API 呼叫失敗：{exc}") from exc
 

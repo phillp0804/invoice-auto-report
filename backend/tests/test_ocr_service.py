@@ -81,6 +81,24 @@ class TestRecognize:
 
         assert result.invoice_number == "AB12345678"
 
+    def test_missing_buyer_tax_id_defaults_to_all_zero(self):
+        """依財政部規範，一般消費者未提供買方統編時預設為 00000000，不可回傳 None。"""
+        service, mock_ai_client = _make_service()
+        mock_ai_client.send_image.return_value = json.dumps(
+            {
+                "invoice_number": "AB12345678",
+                "tax_id": None,
+                "buyer_tax_id": None,
+                "date": None,
+                "amount": None,
+                "items": None,
+            }
+        )
+
+        result = service.recognize(Image.new("RGB", (500, 500)))
+
+        assert result.buyer_tax_id == "00000000"
+
     def test_missing_confidence_field_does_not_crash(self):
         service, mock_ai_client = _make_service()
         mock_ai_client.send_image.return_value = json.dumps(

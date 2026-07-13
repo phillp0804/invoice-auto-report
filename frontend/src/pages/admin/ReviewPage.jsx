@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import InvoiceCard from "../../components/InvoiceCard.jsx";
-import { approveInvoice, getPendingInvoices, rejectInvoice } from "../../api/invoiceApi.js";
+import {
+  approveInvoice,
+  getInvoiceImageUrl,
+  getPendingInvoices,
+  rejectInvoice,
+} from "../../api/invoiceApi.js";
 
 export default function ReviewPage() {
   const [invoices, setInvoices] = useState([]);
@@ -12,6 +17,12 @@ export default function ReviewPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [actionError, setActionError] = useState(null);
   const [processingId, setProcessingId] = useState(null);
+
+  // key: invoiceId, value: blob 網址字串 | "loading" | Error 訊息字串
+  const [imagePreviews, setImagePreviews] = useState({});
+  // 讓 unmount 時的 cleanup 能讀到最新值，而不是 effect 掛載當下的舊值
+  const imagePreviewsRef = useRef(imagePreviews);
+  imagePreviewsRef.current = imagePreviews;
 
   useEffect(() => {
     let cancelled = false;
@@ -78,6 +89,39 @@ export default function ReviewPage() {
     }
   };
 
+  useEffect(() => {
+    // 離開頁面時釋放所有已載入的圖片 blob 網址，避免記憶體洩漏
+    // 透過 ref 讀取，避免只抓到 mount 當下（空物件）的 stale closure
+    return () => {
+      Object.values(imagePreviewsRef.current).forEach((value) => {
+        if (typeof value === "string" && value.startsWith("blob:")) {
+          window.URL.revokeObjectURL(value);
+        }
+      });
+    };
+  }, []);
+
+  const handleToggleImage = async (invoiceId) => {
+    const current = imagePreviews[invoiceId];
+    if (typeof current === "string" && current.startsWith("blob:")) {
+      window.URL.revokeObjectURL(current);
+      setImagePreviews((prev) => {
+        const next = { ...prev };
+        delete next[invoiceId];
+        return next;
+      });
+      return;
+    }
+
+    setImagePreviews((prev) => ({ ...prev, [invoiceId]: "loading" }));
+    try {
+      const url = await getInvoiceImageUrl(invoiceId);
+      setImagePreviews((prev) => ({ ...prev, [invoiceId]: url }));
+    } catch (err) {
+      setImagePreviews((prev) => ({ ...prev, [invoiceId]: err.message }));
+    }
+  };
+
   return (
     <div style={{ maxWidth: 560 }}>
       <h2>待審核例外項目</h2>
@@ -103,7 +147,23 @@ export default function ReviewPage() {
                 >
                   退回
                 </button>
+                <button onClick={() => handleToggleImage(invoice.id)}>
+                  {imagePreviews[invoice.id] ? "隱藏發票原圖" : "顯示發票原圖比對"}
+                </button>
               </div>
+
+              {imagePreviews[invoice.id] === "loading" && <p>圖片載入中...</p>}
+              {imagePreviews[invoice.id] &&
+                imagePreviews[invoice.id] !== "loading" &&
+                (imagePreviews[invoice.id].startsWith("blob:") ? (
+                  <img
+                    src={imagePreviews[invoice.id]}
+                    alt={`發票 ${invoice.invoice_number} 原圖`}
+                    style={{ maxWidth: "100%", marginTop: "0.5rem", borderRadius: 8, border: "1px solid #ddd" }}
+                  />
+                ) : (
+                  <p style={{ color: "#c02929" }}>{imagePreviews[invoice.id]}</p>
+                ))}
 
               {rejectingId === invoice.id && (
                 <form
