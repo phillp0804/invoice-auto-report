@@ -50,3 +50,6 @@ frontend/dist/
 .agents/
 .gemini/
 CLAUDE.md
+
+# 個人開發啟動腳本
+start-dev.bat
